@@ -17,12 +17,20 @@ FILE = Path(__file__).absolute()
 sys.path.append(FILE.parents[0].as_posix())  # add yolov5/ to path
 
 from models.experimental import attempt_load
-from utils.datasets import LoadStreams, LoadImages
+from utils.datasets import LoadStreams, LoadImages, LoadStreamsRos
 from utils.general import check_img_size, check_requirements, check_imshow, colorstr, non_max_suppression, \
     apply_classifier, scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path, save_one_box
 from utils.plots import colors, plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized
 
+import rospy
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
+import numpy as np
+
+def callback(message):
+    global image_message
+    image_message = message
 
 @torch.no_grad()
 def run(weights='yolov5s.pt',  # model.pt path(s)
@@ -48,10 +56,13 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         hide_labels=False,  # hide labels
         hide_conf=False,  # hide confidences
         half=False,  # use FP16 half-precision inference
+        # ros_topic=''
         ):
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
         ('rtsp://', 'rtmp://', 'http://', 'https://'))
+    ros_topic = source.startswith('/')
+    print(source, ros_topic)
 
     # Directories
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
@@ -78,7 +89,10 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
 
     # Set Dataloader
     vid_path, vid_writer = None, None
-    if webcam:
+    if ros_topic:
+        dataset = LoadStreamsRos(source, img_size=imgsz, stride=stride)
+        view_img = True
+    elif webcam:
         view_img = check_imshow()
         cudnn.benchmark = True  # set True to speed up constant image size inference
         dataset = LoadStreams(source, img_size=imgsz, stride=stride)
@@ -89,7 +103,15 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
     if device.type != 'cpu':
         model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
     t0 = time.time()
+
+    # path(или же p) - путь к папке с изображениями. Можно будет убрать связанные куски кода
+    # img - непонятная производная из изображения
+    # im0s - непосредственно изображение
+    # vid_cap можно удалить
     for path, img, im0s, vid_cap in dataset:
+        # print(img[0].shape, im0s[0].shape)
+        # cv2.imshow("cock", cv2.cvtColor(img[0], cv2.COLOR_BGR2RGB))
+        # cv2.waitKey()  # 1 millisecond
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
@@ -110,10 +132,11 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
 
         # Process detections
         for i, det in enumerate(pred):  # detections per image
-            if webcam:  # batch_size >= 1
+            if webcam or ros_topic:  # batch_size >= 1
                 p, s, im0, frame = path[i], f'{i}: ', im0s[i].copy(), dataset.count
             else:
                 p, s, im0, frame = path, '', im0s.copy(), getattr(dataset, 'frame', 0)
+            # print("p is", type(p), p)
 
             p = Path(p)  # to Path
             save_path = str(save_dir / p.name)  # img.jpg
@@ -142,6 +165,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
                         c = int(cls)  # integer class
                         label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
                         plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
+                        print(xyxy)
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
@@ -150,8 +174,10 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
 
             # Stream results
             if view_img:
+                print("SHOW TIME")
                 cv2.imshow(str(p), im0)
-                cv2.waitKey()  # 1 millisecond
+                # cv2.imshow(str(p), img)
+                cv2.waitKey(1)  # 1 millisecond
 
             # Save results (image with detections)
             if save_img:
@@ -185,7 +211,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
 def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default='yolov5s.pt', help='model.pt path(s)')
-    parser.add_argument('--source', type=str, default='data/images', help='file/dir/URL/glob, 0 for webcam')
+    parser.add_argument('--source', type=str, default='data/images', help='file/dir/URL/glob/ROS-topic, 0 for webcam')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='NMS IoU threshold')
@@ -207,6 +233,7 @@ def parse_opt():
     parser.add_argument('--hide-labels', default=False, action='store_true', help='hide labels')
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
+    # parser.add_argument("--ros-topic", type=str, default='', help='ROS Image topic as source (--source argument must be 0)')
     opt = parser.parse_args()
     return opt
 
@@ -218,5 +245,10 @@ def main(opt):
 
 
 if __name__ == "__main__":
+    image_message = None
+    rospy.init_node("drone_detection")
+    # rospy.Subscriber("/camera/color/image_raw", Image, callback)
+    bridge = CvBridge()
+
     opt = parse_opt()
     main(opt)
