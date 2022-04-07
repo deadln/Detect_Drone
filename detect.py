@@ -1,7 +1,7 @@
 """Run inference with a YOLOv5 model on images, videos, directories, streams
 
 Usage:
-    $ python path/to/detect.py --source path/to/img.jpg --weights yolov5s.pt --img 640
+    $ python path/to/detect.py --source /camera/color/image_raw --weights exp27/weights/best.pt --img 640
 """
 
 import argparse
@@ -24,13 +24,8 @@ from utils.plots import colors, plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized
 
 import rospy
-from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
-import numpy as np
+from std_msgs.msg import String
 
-def callback(message):
-    global image_message
-    image_message = message
 
 @torch.no_grad()
 def run(weights='yolov5s.pt',  # model.pt path(s)
@@ -166,17 +161,20 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
                         label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
                         plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
                         print(xyxy)
+                        print(int(xyxy[0]))
+
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
+                    x_cent = (int(xyxy[0]) + int(xyxy[2])) / 2
+                    y_cent = (int(xyxy[1]) + int(xyxy[3])) / 2
+                    pub.publish(f"{x_cent} {y_cent}")
 
             # Print time (inference + NMS)
             print(f'{s}Done. ({t2 - t1:.3f}s)')
 
             # Stream results
             if view_img:
-                print("SHOW TIME")
                 cv2.imshow(str(p), im0)
-                # cv2.imshow(str(p), img)
                 cv2.waitKey(1)  # 1 millisecond
 
             # Save results (image with detections)
@@ -245,10 +243,8 @@ def main(opt):
 
 
 if __name__ == "__main__":
-    image_message = None
     rospy.init_node("drone_detection")
-    # rospy.Subscriber("/camera/color/image_raw", Image, callback)
-    bridge = CvBridge()
+    pub = rospy.Publisher('drone_detection/target', String, queue_size=10)
 
     opt = parse_opt()
     main(opt)
