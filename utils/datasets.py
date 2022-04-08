@@ -201,7 +201,7 @@ class LoadImages:  # for inference
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB and HWC to CHW
         img = np.ascontiguousarray(img)
 
-        return path, img, img0, self.cap
+        return path, img, img0, self.cap, None
 
     def new_video(self, path):
         self.frame = 0
@@ -345,7 +345,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
         img = img[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB and BHWC to BCHW
         img = np.ascontiguousarray(img)
 
-        return self.sources, img, img0, None
+        return self.sources, img, img0, None, None
 
     def __len__(self):
         return 0  # 1E12 frames = 32 streams at 30 FPS for 30 years
@@ -365,7 +365,7 @@ class LoadStreamsRos:  # multiple IP or RTSP cameras
             sources = [sources]
 
         n = 1 # len(sources)
-        self.imgs, self.fps, self.frames, self.threads = [None] * n, [0] * n, [0] * n, [None] * n
+        self.imgs, self.fps, self.frames, self.threads, self.timestamp = [None] * n, [0] * n, [0] * n, [None] * n, [None] * n
         # self.sources = [clean_str(x) for x in sources]  # clean source names for later
         self.sources = sources
         for i, s in enumerate(sources):  # index, source
@@ -413,6 +413,7 @@ class LoadStreamsRos:  # multiple IP or RTSP cameras
 
     def callback(self, message):
         self.imgs[0] = cv2.cvtColor(self.bridge.imgmsg_to_cv2(message, desired_encoding='passthrough'), cv2.COLOR_BGR2RGB)
+        self.timestamp[0] = str(message.header.stamp.secs) + " " + str(message.header.stamp.nsecs)
         # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
     def __iter__(self):
@@ -436,7 +437,9 @@ class LoadStreamsRos:  # multiple IP or RTSP cameras
         img = img[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB and BHWC to BCHW
         img = np.ascontiguousarray(img)
 
-        return self.sources, img, img0, None
+        timestamp = self.timestamp[0]
+
+        return self.sources, img, img0, None, timestamp
 
     def __len__(self):
         return 0  # 1E12 frames = 32 streams at 30 FPS for 30 years

@@ -103,7 +103,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
     # img - непонятная производная из изображения
     # im0s - непосредственно изображение
     # vid_cap можно удалить
-    for path, img, im0s, vid_cap in dataset:
+    for path, img, im0s, vid_cap, timestamp in dataset:
         # print(img[0].shape, im0s[0].shape)
         # cv2.imshow("cock", cv2.cvtColor(img[0], cv2.COLOR_BGR2RGB))
         # cv2.waitKey()  # 1 millisecond
@@ -167,7 +167,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
                     x_cent = (int(xyxy[0]) + int(xyxy[2])) / 2
                     y_cent = (int(xyxy[1]) + int(xyxy[3])) / 2
-                    pub.publish(f"{x_cent} {y_cent}")
+                    pub.publish(f"{x_cent} {y_cent} {timestamp}")
 
             # Print time (inference + NMS)
             print(f'{s}Done. ({t2 - t1:.3f}s)')
