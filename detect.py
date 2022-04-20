@@ -85,6 +85,8 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
     # Set Dataloader
     vid_path, vid_writer = None, None
     if ros_topic:
+        rospy.init_node("drone_detection")
+        pub = rospy.Publisher('drone_detection/target', String, queue_size=10)
         dataset = LoadStreamsRos(source, img_size=imgsz, stride=stride)
         view_img = True
     elif webcam:
@@ -173,8 +175,10 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
                         max_conf = int(conf)
                         x_cent = int((int(xyxy[0]) + int(xyxy[2])) / 2)
                         y_cent = int((int(xyxy[1]) + int(xyxy[3])) / 2)
-                pub.publish(f"{x_cent} {y_cent} {timestamp}")
-
+                if ros_topic:
+                    pub.publish(f"{x_cent} {y_cent} {timestamp}")
+            elif ros_topic:
+                pub.publish(f"-1 -1 {timestamp}")
             # Print time (inference + NMS)
             print(f'{s}Done. ({t2 - t1:.3f}s)')
 
@@ -249,8 +253,5 @@ def main(opt):
 
 
 if __name__ == "__main__":
-    rospy.init_node("drone_detection")
-    pub = rospy.Publisher('drone_detection/target', String, queue_size=10)
-
     opt = parse_opt()
     main(opt)
